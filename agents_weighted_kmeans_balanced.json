@@ -1,0 +1,79 @@
+{
+    "num_agents": 4,
+    "clustering_method": "balanced_weighted_kmeans_with_loads",
+    "features": [
+        "position",
+        "parking_capacity",
+        "local_traffic_score"
+    ],
+    "agents": {
+        "agent_1": {
+            "centroid": [
+                8776.53,
+                8428.232857142857
+            ],
+            "seed_parkings": [
+                "P1",
+                "P2",
+                "P3",
+                "P19",
+                "P20",
+                "P21",
+                "P22"
+            ],
+            "total_capacity": 2100,
+            "total_traffic_score": 14367
+        },
+        "agent_2": {
+            "centroid": [
+                5814.02,
+                5967.368750000001
+            ],
+            "seed_parkings": [
+                "P4",
+                "P5",
+                "P8",
+                "P12",
+                "P15",
+                "P23",
+                "P24",
+                "P28"
+            ],
+            "total_capacity": 2400,
+            "total_traffic_score": 14430
+        },
+        "agent_3": {
+            "centroid": [
+                6725.576666666668,
+                5197.951666666667
+            ],
+            "seed_parkings": [
+                "P6",
+                "P7",
+                "P9",
+                "P10",
+                "P11",
+                "P27"
+            ],
+            "total_capacity": 1800,
+            "total_traffic_score": 2062
+        },
+        "agent_4": {
+            "centroid": [
+                3309.7171428571423,
+                7275.112857142856
+            ],
+            "seed_parkings": [
+                "P13",
+                "P14",
+                "P16",
+                "P17",
+                "P18",
+                "P25",
+                "P26"
+            ],
+            "total_capacity": 2100,
+            "total_traffic_score": 1069
+        }
+    }
+}
