@@ -93,12 +93,8 @@ class AgentMapper:
         k: int = 3,
     ) -> List[Tuple[str, float]]:
         """
-        Score agent = distance au centroïde × facteur seed (toujours positif).
-
-        FIX: utilisation d'un ratio multiplicatif au lieu d'une soustraction pour
-             éviter les scores négatifs qui rendaient les comparaisons incohérentes.
-             seed_factor ∈ [0.85, 1.0] — plus les parkings seeds sont proches,
-             plus le facteur est bas, donc plus le score final est petit (meilleur).
+        Score agent = distance au centroïde - bonus si ses parkings seeds sont proches.
+        Plus petit = meilleur agent.
         """
         scored = []
 
@@ -115,14 +111,11 @@ class AgentMapper:
 
             if len(seed_dists) > 0:
                 min_seed_dist = min(seed_dists)
-                # FIX: facteur multiplicatif ∈ [0.85, 1.0] — toujours positif
-                # Plus le parking seed est proche (min_seed_dist → 0), plus seed_factor → 0.85
-                # Plus il est loin (min_seed_dist → ∞), plus seed_factor → 1.0
-                seed_factor = 1.0 - 0.15 / (1.0 + min_seed_dist / 500.0)
+                seed_bonus = min_seed_dist * 0.25
             else:
-                seed_factor = 1.0
+                seed_bonus = 0.0
 
-            final_score = centroid_dist * seed_factor  # toujours positif
+            final_score = centroid_dist - seed_bonus
             scored.append((agent_name, float(final_score)))
 
         scored.sort(key=lambda x: x[1])
