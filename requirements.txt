@@ -1,0 +1,18 @@
+# Simulation et API
+sumo
+traci
+
+# Apprentissage et IA
+torch>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.2.0
+
+# Apprentissage Fédéré
+flwr>=1.6.0
+
+# Manipulation de données et Analyse
+pandas>=2.0.0
+matplotlib>=3.7.0
+
+# Outils de parsing et système
+xmltodict
