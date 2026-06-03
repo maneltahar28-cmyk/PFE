@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='utf-8'?>
+<additional>
+    <parkingArea id="P1" lane="-30850#0_0" startPos="0" endPos="30" roadsideCapacity="65" width="2.50" angle="90.00" />
+    <parkingArea id="P2" lane="-30850#1_0" startPos="50" endPos="100" roadsideCapacity="65" width="2.50" angle="90.00" />
+    <parkingArea id="P3" lane="-30850#4_0" startPos="100" endPos="200" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P4" lane="--30590#6_0" startPos="30" endPos="50" roadsideCapacity="50" width="2.50" angle="90.00" />
+
+    <parkingArea id="P5" lane="-30838#1_0" startPos="50" endPos="100" roadsideCapacity="85" width="2.50" angle="90.00" />
+    <parkingArea id="P6" lane="-30838#2_0" startPos="100" endPos="200" roadsideCapacity="85" width="2.50" angle="90.00" />
+    <parkingArea id="P7" lane="--30590#7_0" startPos="250" endPos="400" roadsideCapacity="65" width="2.50" angle="90.00" />
+    <parkingArea id="P8" lane="--30590#8_0" startPos="250" endPos="400" roadsideCapacity="65" width="2.50" angle="90.00" />
+
+    <parkingArea id="P9" lane="-30842#0_0" startPos="50" endPos="100" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P10" lane="-30842#1_0" startPos="20" endPos="50" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P11" lane="-30842#4_0" startPos="20" endPos="40" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P12" lane="--30592#1_0" startPos="50" endPos="100" roadsideCapacity="50" width="2.50" angle="90.00" />
+
+    <parkingArea id="P13" lane="-30844#0_0" startPos="250" endPos="400" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P14" lane="-30844#1_0" startPos="50" endPos="100" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P15" lane="-30846#0_0" startPos="50" endPos="100" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P16" lane="-30846#3_0" startPos="50" endPos="80" roadsideCapacity="50" width="2.50" angle="90.00" />
+
+    <parkingArea id="P17" lane="--30592#3_0" startPos="50" endPos="100" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P18" lane="--30592#6_0" startPos="20" endPos="30" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P19" lane="--30596#0_0" startPos="250" endPos="400" roadsideCapacity="65" width="2.50" angle="90.00" />
+    <parkingArea id="P20" lane="--30596#2_0" startPos="50" endPos="80" roadsideCapacity="65" width="2.50" angle="90.00" />
+
+    <parkingArea id="P21" lane="--30608#0_0" startPos="100" endPos="200" roadsideCapacity="65" width="2.50" angle="90.00" />
+    <parkingArea id="P22" lane="--30608#1_0" startPos="250" endPos="400" roadsideCapacity="65" width="2.50" angle="90.00" />
+    <parkingArea id="P23" lane="-32404#0_0" startPos="50" endPos="100" roadsideCapacity="65" width="2.50" angle="90.00" />
+    <parkingArea id="P24" lane="-32404#3_0" startPos="80" endPos="100" roadsideCapacity="50" width="2.50" angle="90.00" />
+
+    <parkingArea id="P25" lane="-32406#0_0" startPos="50" endPos="100" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P26" lane="-32406#2_0" startPos="50" endPos="80" roadsideCapacity="50" width="2.50" angle="90.00" />
+    <parkingArea id="P27" lane="-32408_0" startPos="50" endPos="80" roadsideCapacity="85" width="2.50" angle="90.00" />
+    <parkingArea id="P28" lane="-32410#0_0" startPos="50" endPos="100" roadsideCapacity="65" width="2.50" angle="90.00" />
+</additional>
