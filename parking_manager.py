@@ -14,7 +14,7 @@ class ParkingManager:
     MIN_ASSIGN_ROUTE_LENGTH_M = 20.0
     
     # PARAMÈTRES DE STATIONNEMENT STOCHASTIQUE DE BASE (Rétention longue active)
-    DEFAULT_PARKING_DURATION = 10800  # Espérance de 3 heures (en secondes) pour l'accumulation de charge
+    DEFAULT_PARKING_DURATION = 18000  # Espérance de 5 heures (en secondes) pour l'accumulation de charge
     PARKING_STD_DEV = 3600            # Écart-type de 1 heure
 
     def __init__(self, parkings_xml_path):

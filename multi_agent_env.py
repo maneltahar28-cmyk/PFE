@@ -55,9 +55,13 @@ class MultiAgentParkingEnv:
 
         self.warmup_steps = int(warmup_steps)
         self.gui_delay = float(gui_delay)
-        self.top_k = int(top_k)                       # Nombre maximal de parkings candidats retenus par état
-        self.max_steps = int(max_steps)               # Durée maximale d'un épisode/round de simulation
-
+        self.top_k = int(top_k)                       # Nombre maximal de parkings candidats retenus par état   
+        self.max_steps = int(max_steps)          # Durée maximale d'un épisode/round de simulation
+         
+# --- AJUSTEMENT DYNAMIQUE DE LA DURÉE DU SCÉNARIO ---
+        if os.environ.get("MADINA_EVAL_MODE") == "True":
+            self.max_steps = int(os.environ.get("MADINA_STEPS", self.max_steps))
+        
         self.parking_demand_prob = float(parking_demand_prob)
 
         # Suivi de l'état des véhicules pour le traitement séquentiel des requêtes de stationnement
@@ -273,39 +277,31 @@ class MultiAgentParkingEnv:
         print(f"[WARMUP] {self.agent_name} | max steps atteints={max_warmup_steps}")
 
     def start(self):
-        """
-        Initialise la connexion TraCI et lance l'exécutable binaire de simulation SUMO.
-        Intègre dynamiquement la fenêtre temporelle dictée par le pipeline multi-scénarios MADINA.
-        """
-        # Capture directe et robuste de l'horaire depuis les variables système héritées du pipeline
-        begin_time = int(os.getenv("MADINA_BEGIN_TIME", 0))
-        end_time = begin_time + self.max_steps
-
-        # Détermination du binaire SUMO (avec ou sans GUI)
+        """Initialise la connexion TraCI et lance l'exécutable binaire de simulation SUMO."""
         sumo_binary = "sumo-gui" if self.use_gui else "sumo"
-
-        # Construction de la commande standardisée de simulation
+        begin_time = os.environ.get("MADINA_BEGIN", "0.00")
+        traffic_scale = os.environ.get("MADINA_SCALE", "1.0")
+        
+        # --- RÉCUPÉRATION DE LA SEED (Injectée par le script d'éval) ---
+        seed = os.environ.get("MADINA_SEED", "42")
+        # Le paramètre self.sumo_cfg contient le chemin absolu vers le fichier de configuration de simulation .sumocfg
         sumo_cmd = [
-            sumo_binary,  # ✅ Correction validée : Remplacement de self.sumo_binary défectueux
-            "-c", self.sumo_cfg,
+            sumo_binary,              #  L'exécutable binaire SUMO est placé en tête de commande
+            "-c", self.sumo_cfg,      #  Utilisation de la variable d'instance valide existante
             "--begin", str(begin_time),
-            "--end", str(end_time),
-            "--step-length", "1",
-            "--quit-on-end", "true",
-            "--duration-log.disable", "true",
-            "--no-step-log", "true",
-            "--collision.action", "warn",
-            "--time-to-teleport", "60",
-            "--ignore-route-errors", "true",
-        ]
+            "--scale", str(traffic_scale),
+            "--seed", str(seed),
+            "--no-warnings", "true"
+        ]     
 
         if self.use_gui:
             sumo_cmd += ["--start", "--delay", str(int(self.gui_delay * 1000))]
 
-        # Lancement de l'instance SUMO dédiée à l'agent courant
-        traci.start(sumo_cmd)
-        self.conn = traci
-
+        # Si l'instance de connexion n'est pas encore établie, on initialise TraCI
+        if self.conn is None:
+            traci.start(sumo_cmd)
+            self.conn = traci.getConnection()
+        
         # Liaison et initialisation de l'infrastructure de parking
         self.parking_manager.set_connection(self.conn)
         self.parking_manager.initialize()
@@ -456,19 +452,13 @@ class MultiAgentParkingEnv:
         return 1000.0 if pressure < 1.3 else 1400.0
 
     def compute_candidate_score(self, pid, dist, mode):
-        """
-        Calcule un score d'évaluation heuristique a priori pour le tri initial des parkings candidats.
-        Modifié : Intègre une estimation physique temporelle linéaire instantanée pour éviter le surcoût TraCI.
-        """
+        """Calcule un score d'évaluation heuristique a priori pour le tri initial des parkings candidats."""
         base_price = 4.50
         price = base_price
 
         cap = max(self.parking_manager.get_capacity(pid), 1)
         free = self.parking_manager.get_free_slots(pid)
         incoming = self.parking_manager.get_incoming_count(pid)
-
-        # --- ÉVALUATION AVANCÉE : Estimation de l'ETA linéaire en minutes (Vitesse moy : 30 km/h ~ 8.3 m/s) ---
-        time_estimation_min = (float(dist) / 8.3) / 60.0
 
         # Normalisation linéaire des variables d'environnement entre 0.0 et 1.0
         dist_norm = min(float(dist) / 1300.0, 1.0)
@@ -498,10 +488,10 @@ class MultiAgentParkingEnv:
         if pred_occ_ratio > 0.90:
             saturation_penalty += 3.50
 
-        # Pondérations objectives adaptatives selon les préférences du profil conducteur actif
+        # Pondérations objectives selon les préférences du profil conducteur actif
         if mode == "close":
             score = (
-                4.50 * time_estimation_min  # Focus lourd sur le temps de parcours (ETA)
+                2.50 * dist_norm
                 + 0.10 * price_norm
                 + 0.18 * pred_occ_ratio
                 + 0.05 * incoming_ratio
@@ -509,24 +499,20 @@ class MultiAgentParkingEnv:
             )
         elif mode == "cheap":
             score = (
-                1.50 * time_estimation_min
+                1.10 * dist_norm
                 + 1.30 * price_norm
-                + 3.50 * pred_occ_ratio     # Évite fortement les zones saturées
+                + 0.18 * pred_occ_ratio
                 + 0.05 * incoming_ratio
                 - 0.08 * free_ratio
             )
         else:
             score = (
-                2.50 * time_estimation_min
+                1.60 * dist_norm
                 + 0.75 * price_norm
-                + 2.00 * pred_occ_ratio
+                + 0.22 * pred_occ_ratio
                 + 0.05 * incoming_ratio
                 - 0.10 * free_ratio
             )
-
-        # Rapprochement structurel : Pénalité budgétaire anticipée pour le profil cheap sur l'hypercentre
-        if mode == "cheap" and pid in ["P25", "P16"]:
-            score += 2.0
 
         # Consolidation finale du score heuristique
         score += dominance_penalty
@@ -536,7 +522,7 @@ class MultiAgentParkingEnv:
         return float(score)
 
     def _get_parking_positions(self):
-        """Génère l'index spatial bidimensionnel des coordonnées géométriques de chaque parking."""
+        """Génère l'index spatial bidimensionnel des coordonnées géométriques (Shape au point central) de chaque parking."""
         positions = {}
         for pid, meta in self.parking_manager.parking_meta.items():
             try:
@@ -814,7 +800,7 @@ class MultiAgentParkingEnv:
     def _compute_gagnant_gagnant_reward(self, assigned, mode, dist, price, price_level, predicted_occupancy=0, capacity=1):
         """
         Calcule la récompense multi-objectif équilibrée (Équilibre de Nash - Gagnant/Gagnant).
-        Modifié : Intègre un bonus coopératif territorial de Load Balancing multi-agents.
+        Objectifs cibles : Valeur espérée > +6, Distance moyenne < 1000m, Taux de succès global : 80-90%.
         """
         if not assigned:
             return -15.0  # Pénalité d'échec robuste pour stabiliser le succès dans la plage cible 80%-90%
@@ -822,7 +808,7 @@ class MultiAgentParkingEnv:
         # 1. CAPITAL DE BASE POUR REWARD GLOBALE EXCELLENTE
         base_success_reward = 8.0
         
-        # 2. RENTABILITÉ DU SYSTÈME (Yield Management)
+        # 2. RENTABILITÉ DU SYSTÈME (Yield Management - Reste entre 3€ et 7€ via le step)
         if price_level == "premium":
             revenue_reward = 4.0
         elif price_level == "standard":
@@ -832,6 +818,8 @@ class MultiAgentParkingEnv:
 
         # 3. PÉNALITÉ ET NORMALISATION DE LA DISTANCE (Alignée sur le nouveau max de 1300m)
         dist_norm = min(float(dist) / 1300.0, 1.0)
+        
+        # Pénalité de distance adoucie en continu pour ne pas écraser la reward globale
         distance_penalty = - 4.0 * dist_norm  
         
         # BONUS CRITIQUE DE PROXIMITÉ (Pour attirer l'IA sous les 800m et faire chuter la moyenne)
@@ -846,12 +834,12 @@ class MultiAgentParkingEnv:
         
         occupancy_bonus = 0.0
         if pred_occ_ratio < 0.40:
-            occupancy_bonus += 3.0 * (0.40 - pred_occ_ratio)
+           occupancy_bonus += 3.0 * (0.40 - pred_occ_ratio)
         elif 0.40 <= pred_occ_ratio <= 0.75:
             occupancy_bonus += 2.0
         else:
-            # Pénalité de saturation exponentielle à l'approche de 1.0 (100%)
-            occupancy_bonus -= 5.0 * (pred_occ_ratio - 0.75) - np.exp(10 * (pred_occ_ratio - 0.90))    
+    # Pénalité de saturation exponentielle à l'approche de 1.0 (100%)
+          occupancy_bonus -= 5.0 * (pred_occ_ratio - 0.75) - np.exp(10 * (pred_occ_ratio - 0.90))    
     
         # 5. SATISFACTION CONDUCTEUR (Équilibre de Nash)
         user_penalty = 0.0
@@ -860,19 +848,7 @@ class MultiAgentParkingEnv:
         if mode == "close" and dist > 800.0:
             user_penalty -= 5.0
 
-        # --- NOUVEAUTÉ : Bonus Coopératif Multi-Agent de Redistribution de Charge (Load Balancing) ---
-        bonus_load_balancing = 0.0
-        try:
-            p25_occ_ratio = float(self.parking_manager.get_real_occupancy("P25")) / 50.0
-            # Si le pole central central P25 entre dans la zone rouge de saturation (> 75%)
-            if p25_occ_ratio > 0.75:
-                # Si l'agent réussit à placer la voiture sur un parking secondaire libre (< 40%)
-                if pred_occ_ratio < 0.40:
-                    bonus_load_balancing = 4.0 * (p25_occ_ratio - pred_occ_ratio)
-        except Exception:
-            pass
-
-        return float(base_success_reward + revenue_reward + distance_penalty + occupancy_bonus + user_penalty + bonus_load_balancing)
+        return float(base_success_reward + revenue_reward + distance_penalty + occupancy_bonus + user_penalty)
 
     def step(self, action_payload):
         """
@@ -899,7 +875,7 @@ class MultiAgentParkingEnv:
 
         # Déballage des variables contextuelles mémorisées (Variables validées)
         vid = self.current_vehicle_id
-        mode = self.current_mode             # ✅ ALIGNÉ : Alignement parfait
+        mode = self.current_mode             # ✅ CORRIGÉ : Alignement parfait
         candidates = self.current_candidates
         source_agent = self.current_source_agent
 

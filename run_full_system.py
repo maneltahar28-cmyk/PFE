@@ -8,13 +8,11 @@ import time
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PYTHON = sys.executable
 
-
 def run_blocking(cmd):
     print(f"\n[RUN] {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=PROJECT_ROOT)
     if result.returncode != 0:
         raise RuntimeError(f"Commande échouée : {' '.join(cmd)}")
-
 
 def run_background(cmd, log_path=None, extra_env=None):
     print(f"[START] {' '.join(cmd)}")
@@ -47,7 +45,6 @@ def run_background(cmd, log_path=None, extra_env=None):
     )
     return proc, log_file
 
-
 def load_agents(agents_json):
     if not os.path.exists(agents_json):
         raise FileNotFoundError(f"Fichier introuvable : {agents_json}")
@@ -72,7 +69,6 @@ def load_agents(agents_json):
 
     return agent_names
 
-
 def stop_process(proc):
     if proc is None or proc.poll() is not None:
         return
@@ -93,7 +89,6 @@ def stop_process(proc):
         except Exception:
             pass
 
-
 def clean_old_outputs():
     targets = [
         os.path.join(PROJECT_ROOT, "outputs", "decisions_log.csv"),
@@ -110,7 +105,6 @@ def clean_old_outputs():
                 print(f"[CLEAN] supprimé : {path}")
             except Exception as e:
                 print(f"[WARN] impossible de supprimer {path} : {e}")
-
 
 def print_new_server_rounds(server_log, last_pos=0):
     if not os.path.exists(server_log):
@@ -130,7 +124,6 @@ def print_new_server_rounds(server_log, last_pos=0):
 
     return last_pos
 
-
 def main():
     outputs_dir = os.path.join(PROJECT_ROOT, "outputs", "logs")
     os.makedirs(outputs_dir, exist_ok=True)
@@ -143,17 +136,13 @@ def main():
     server_proc = None
 
     try:
-        print("\n🚀 === LANCEMENT DU SYSTÈME COMPLET FINAL ===")
+        print("\n === LANCEMENT DU SYSTÈME COMPLET FINAL ===")
 
-        print("\n[0] Nettoyage des anciens outputs...")
         clean_old_outputs()
-
-        print("\n[1] Génération / vérification des agents...")
         run_blocking([PYTHON, "-m", "tools.build_weighted_agent_clusters"])
 
         agent_names = load_agents(agents_json)
         print(f"\n✅ Agents détectés : {agent_names}")
-
         print("\n[2] Vérification configuration finale...")
         print(" - nombre d'agents attendu : 4")
         print(" - noms attendus          : agent_1, agent_2, agent_3, agent_4")
@@ -170,7 +159,6 @@ def main():
         )
         all_processes.append(server_proc)
         log_files.append(server_log_file)
-
         time.sleep(5)
 
         print("\n[4] Démarrage des 4 clients Flower...")
@@ -197,10 +185,6 @@ def main():
         print(f" - serveur : {server_log}")
         for agent_name in agent_names:
             print(f" - client {agent_name} : outputs/logs/{agent_name}.log")
-
-        print("\nAucune fenêtre SUMO-GUI ne doit s'ouvrir.")
-        print("Tous les agents tournent en mode sumo sans interface.")
-        print("\nLe script s'arrêtera automatiquement à la fin des rounds.\n")
 
         already_reported_clients = set()
         server_log_pos = 0
@@ -232,7 +216,7 @@ def main():
         print(f"\n❌ Erreur dans run_full_system : {e}")
 
     finally:
-        print("\n🧹 Arrêt des processus...")
+        print("\n Arrêt des processus...")
 
         for proc in reversed(all_processes):
             stop_process(proc)
@@ -245,7 +229,5 @@ def main():
                     pass
 
         print("✅ Tous les processus ont été arrêtés.")
-
-
 if __name__ == "__main__":
     main()

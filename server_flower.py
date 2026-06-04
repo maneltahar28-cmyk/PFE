@@ -1,23 +1,13 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
-"""
-Projet MADINA - Smart Parking Management System
-Script Serveur Flower (Apprentissage Fédéré) - Version Finale Corrigée Pipeline
-"""
-
 import os
 import flwr as fl
 import torch
 from typing import Dict, List, Optional, Tuple
 
 # Configuration du nombre de rounds et définition du chemin de persistance du modèle global
-NUM_ROUNDS = 1 
+NUM_ROUNDS = 1
 CHECKPOINT_PATH = "checkpoints/madina_global_model.pth"
 
-# =========================================================================
 # 🌟 1. STRATÉGIE D'AGRÉGATION ET DE SAUVEGARDE AUTOMATIQUE SUR LE DISQUE
-# =========================================================================
 class MadinaSaveStrategy(fl.server.strategy.FedAvg):
     """
     Extension personnalisée de la stratégie FedAvg (Federated Averaging).
@@ -35,123 +25,123 @@ class MadinaSaveStrategy(fl.server.strategy.FedAvg):
         
         # Enregistrement systématique des poids du modèle si le round est validé (pas d'échec critique d'agrégation)
         if aggregated_parameters is not None:
-            print(f"\n💾 [ROUND {server_round}] Agrégation réussie. Enregistrement du point de contrôle...")
-            # Dé-sérialisation des paramètres Flower en tableaux NumPy (ndarrays)
-            weights_ndarrays = fl.common.parameters_to_ndarrays(aggregated_parameters)
+            print(f"💾 [ROUND {server_round}] Agrégation réussie. Enregistrement du point de contrôle...")
             
-            # Création sécurisée du dossier de stockage des points de contrôle
-            os.makedirs("checkpoints", exist_ok=True)
+            # Conversion des paramètres Flower (octets) en tenseurs PyTorch
+            tensors = fl.common.parameters_to_ndarrays(aggregated_parameters)
             
-            # Sauvegarde continue du dernier modèle à jour (écrase le précédent)
-            torch.save(weights_ndarrays, CHECKPOINT_PATH)
-            # Sauvegarde d'historique propre au round pour le suivi de la convergence
-            torch.save(weights_ndarrays, f"checkpoints/madina_model_round_{server_round}.pth")
+            # Création du dossier des points de contrôle s'il n'existe pas
+            os.makedirs(os.path.dirname(CHECKPOINT_PATH), exist_ok=True)
+            
+            # Sauvegarde physique du dictionnaire d'état des réseaux de neurones MADINA
+            torch.save(tensors, CHECKPOINT_PATH)
             print(f"✅ Modèle global synchronisé et sauvegardé sous : {CHECKPOINT_PATH}\n")
             
         return aggregated_parameters, aggregated_metrics
 
-
+# ⚙️ 2. CONFIGURATION DYNAMIQUE DES PARAMÈTRES D'ENTRAÎNEMENT LOCAUX
 def fit_config(server_round: int):
     """
     Génère le dictionnaire de configuration envoyé aux clients Flower avant l'entraînement local.
     Intègre notamment le calendrier de décroissance synchrone de l'exploration epsilon.
     """
     # Formule géométrique décroissante pour Epsilon (exploration forte au début, exploitation à la fin)
+    # Reste bloqué à un plancher minimum de sécurité de 2% (0.02) pour maintenir une exploration résiduelle
     epsilon = max(0.02, 0.20 * (0.80 ** (server_round - 1)))
+    
+    # --- 📊 INTERCEPTION DU SCRIPT AUTOMATIQUE MULTI-SCÉNARIOS (S1 à S5) ---
+    # Si le protocole d'évaluation est actif, on écrase epsilon à 0 (Exploitation Pure)
+    # et on aligne dynamiquement le garde-fou de pas SUMO sur la durée du scénario courant
+    if os.environ.get("MADINA_EVAL_MODE") == "True":
+        epsilon = 0.0
+        max_sim_steps = int(os.environ.get("MADINA_STEPS", 2500))
+    else:
+        max_sim_steps = 2500 # Garde-fou nominal de sécurité en phase d'entraînement classique
     
     config = {
         "server_round": int(server_round),
         "epsilon": float(epsilon),              # Taux d'exploration Epsilon-Greedy transmis à l'agent DQN local
         "batch_size": 64,                       # Taille des lots pour l'optimisation par descente de gradient
-        "gamma": 0.95,                          # Facteur d'atténuation des récompenses futures (Discount Factor)
+        "gamma": 0.95,                           # Facteur d'atténuation des récompenses futures (Discount Factor)
         "steps_per_round": 1500,      
         "eval_steps": 200,                      # Nombre de pas de temps alloués à la validation locale
         "warmup_steps": 150,                    # Phase transitoire d'injection du trafic SUMO avant apprentissage
-        "max_total_sim_steps": 2500,            # Garde-fou anti-blocage (sécurité de fin d'épisode dans SUMO)
+        "max_total_sim_steps": max_sim_steps,   # Ajustement dynamique ou nominal du temps d'épisode
     }
-    print(f"--- Round {server_round} : epsilon={epsilon:.3f} | steps={config['steps_per_round']} ---")
+    print(f"--- Round {server_round} : epsilon={epsilon:.3f} | steps={config['steps_per_round']} | max_sim_steps={config['max_total_sim_steps']} ---")
     return config
 
 
 def evaluate_config(server_round: int):
-    """Génère le dictionnaire de configuration envoyé aux clients Flower avant l'évaluation locale."""
+    """Génère la configuration spécifique pour la phase de validation locale des clients."""
     return {
         "server_round": int(server_round),
-        "eval_steps": 200,
-        "warmup_steps": 150,
+        "batch_size": 64,
+        "gamma": 0.95,
     }
 
-
-def aggregate_fit_metrics(metrics):
-    """
-    Fonction de rappel (callback) pour agréger les métriques d'entraînement remontées par les clients.
-    """
-    if not metrics:
-        return {}
-    total_clients = len(metrics)
+# 📊 3. FONCTIONS DE CENTRALISATION ET D'AGRÉGATION DES MÉTRIQUES URBAINES
+def aggregate_fit_metrics(metrics: List[Tuple[int, Dict[str, fl.common.Scalar]]]) -> Dict[str, fl.common.Scalar]:
+    """Calcule la moyenne pondérée des indicateurs de performance d'entraînement collectés."""
+    total_examples = sum([num_examples for num_examples, _ in metrics])
     
-    # Extraction et moyennage des indicateurs de performance de chaque client actif
-    avg_reward = sum(m.get("reward", 0.0) for _, m in metrics) / total_clients
-    avg_assigned = sum(m.get("assigned", 0.0) for _, m in metrics) / total_clients
-    avg_loss = sum(m.get("loss", 0.0) for _, m in metrics) / total_clients
-    avg_buffer = sum(m.get("buffer_size", 0.0) for _, m in metrics) / total_clients
-    avg_steps = sum(m.get("effective_steps", 0.0) for _, m in metrics) / total_clients
+    # Initialisation des accumulateurs de KPIs macroéconomiques
+    agg_reward = 0.0
+    agg_loss = 0.0
+    agg_assigned = 0.0
     
-    print(
-        f"FIT AGGREGATED | reward={avg_reward:.3f} | assigned={avg_assigned:.3f} | "
-        f"loss={avg_loss:.4f} | buffer={avg_buffer:.1f} | steps={avg_steps:.1f}"
-    )
+    for num_examples, m in metrics:
+        agg_reward += m.get("reward", 0.0) * num_examples
+        agg_loss += m.get("loss", 0.0) * num_examples
+        agg_assigned += m.get("assigned", 0.0) * num_examples
+        
     return {
-        "reward": float(avg_reward),
-        "assigned": float(avg_assigned),
-        "loss": float(avg_loss),
-        "buffer_size": float(avg_buffer),
-        "effective_steps": float(avg_steps),
+        "reward": agg_reward / total_examples,
+        "loss": agg_loss / total_examples,
+        "assigned": agg_assigned / total_examples,
     }
 
 
-def aggregate_evaluate_metrics(metrics):
-    """
-    Fonction de rappel (callback) pour agréger les métriques d'évaluation (validation) des clients.
-    """
-    if not metrics:
-        return {}
-    total_clients = len(metrics)
+def aggregate_evaluate_metrics(metrics: List[Tuple[int, Dict[str, fl.common.Scalar]]]) -> Dict[str, fl.common.Scalar]:
+    """Calcule la moyenne pondérée des indicateurs de performance de validation collectés."""
+    total_examples = sum([num_examples for num_examples, _ in metrics])
     
-    # Calcul des moyennes pour la phase d'inférence pure (sans exploration)
-    avg_reward = sum(m.get("reward", 0.0) for _, m in metrics) / total_clients
-    avg_assigned = sum(m.get("assigned", 0.0) for _, m in metrics) / total_clients
+    agg_reward = 0.0
+    agg_assigned = 0.0
     
-    print(f"EVAL AGGREGATED | reward={avg_reward:.3f} | assigned={avg_assigned:.3f}")
+    for num_examples, m in metrics:
+        agg_reward += m.get("reward", 0.0) * num_examples
+        agg_assigned += m.get("assigned", 0.0) * num_examples
+        
+    print(f"\nEVAL AGGREGATED | reward={agg_reward / total_examples:.3f} | assigned={agg_assigned / total_examples:.3f}")
     return {
-        "reward": float(avg_reward),
-        "assigned": float(avg_assigned),
+        "reward": agg_reward / total_examples,
+        "assigned": agg_assigned / total_examples,
     }
 
-
-if __name__ == "__main__":
-    print("     DÉMARRAGE DU SERVEUR FLOWER - PROJET MADINA (D&M SMART PARK)   ")
-    print(f"  NUM_ROUNDS     = {NUM_ROUNDS}")
-    print(f"  steps_per_round = 1500")
+# 🚀 4. POINT D'ENTRÉE DU SERVEUR DE CONVERGENCE FÉDÉRÉE
+def main():
+    print("\n" + "="*70)
+    print("🧠 [MADINA CENTRAL SERVER] Initialisation du Serveur Fédéré Flower")
+    print("="*70)
     
-    # Tentative de récupération et de chargement des acquis d'exécutions antérieures (Warm-start)
     initial_parameters = None
+    
+    # Stratégie de rechargement à chaud : Reprise automatique des poids existants s'ils sont sur le disque
     if os.path.exists(CHECKPOINT_PATH):
-        print(f"✨ Alignement historique détecté : {CHECKPOINT_PATH}")
+        print(f"📦 Point de contrôle détecté sous {CHECKPOINT_PATH}. Chargement en mémoire vive...")
         try:
-            # 🔥 SÉCURISATION DU PIPELINE : Ajout de weights_only=False pour autoriser les structures DQN/NumPy
-            loaded_weights = torch.load(CHECKPOINT_PATH, weights_only=False)
-            # Conversion des structures ndarrays en paramètres Flower sérialisés
-            initial_parameters = fl.common.ndarrays_to_parameters(loaded_weights)
-            print("✅ Modèle global réinitialisé avec succès pour le nouveau scénario.")
+            tensors = torch.load(CHECKPOINT_PATH)
+            initial_parameters = fl.common.ndarrays_to_parameters(tensors)
+            print("✅ Poids du modèle global Duel DDQN unifiés chargés avec succès. Reprise de l'apprentissage.")
         except Exception as e:
             print(f"❌ Impossible de charger les poids existants ({e}). Démarrage de zéro.")
     else:
-        print("🚀 Aucun point de contrôle antérieur détecté. Initialisation de zéro.")
+        print("🚀 Aucun point de contrôle antérieur détecté. Initialisation à zéro.")
 
     # Instanciation de la stratégie personnalisée avec configuration des seuils de synchronisation
     strategy = MadinaSaveStrategy(
-        fraction_fit=1.0,               # Sollicite 100% des clients disponibles pour l'entraînement
+        fraction_fit=1.0,               # Sollicite 100% des clients disponibles pour l'entraînement (les 4 agents)
         fraction_evaluate=1.0,          # Sollicite 100% des clients disponibles pour la validation
         min_fit_clients=4,              # Nombre minimal de clients requis pour valider une étape d'entraînement
         min_evaluate_clients=4,         # Nombre minimal de clients requis pour valider une étape d'évaluation
@@ -169,3 +159,6 @@ if __name__ == "__main__":
         config=fl.server.ServerConfig(num_rounds=NUM_ROUNDS),
         strategy=strategy,
     )
+
+if __name__ == "__main__":
+    main()
